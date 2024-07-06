@@ -1,1 +1,1 @@
-web: python visa_checker.py
+web: python3 visa_checker.py
