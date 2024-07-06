@@ -1,15 +1,18 @@
+from flask import Flask, jsonify
+from threading import Thread
+import time
+import requests
+import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
-import requests
-import os
-from dotenv import load_dotenv
 from selenium.webdriver.chrome.service import Service
+from dotenv import load_dotenv
 
-# Load environment variables from .env file
+app = Flask(__name__)
+
 load_dotenv()
 
 # Get credentials from environment variables
@@ -23,50 +26,60 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--no-sandbox")
 
-# Set up Chrome driver service
 chrome_service = Service(executable_path=os.environ.get("CHROMEDRIVER_PATH"))
 driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
 
-# Function to login
+logs = []
+status = {
+    "next_check": None,
+    "last_check": None,
+    "appointment_booked": False,
+    "appointment_date": None,
+    "appointment_time": None,
+    "current_url": None
+}
+
+@app.route('/logs', methods=['GET'])
+def get_logs():
+    return jsonify(logs)
+
+@app.route('/status', methods=['GET'])
+def get_status():
+    return jsonify(status)
+
 def login(driver, username, password):
-    driver.get("https://visas-de.tlscontact.com/appointment/gb/gbMNC2de/2542162")
+    driver.get("https://visas-de.tlscontact.com/appointment/gb/gbMNC2de/2521249")
     try:
-        # Wait for and fill the login form
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, "username")))
         login_field = driver.find_element(By.NAME, "username")
         password_field = driver.find_element(By.NAME, "password")
         
-        print("Entering username")
+        logs.append("Entering username")
         login_field.send_keys(username)
         
-        print("Entering password")
+        logs.append("Entering password")
         password_field.send_keys(password)
         
-        print("Submitting login form")
+        logs.append("Submitting login form")
         password_field.send_keys(Keys.RETURN)
         
-        # Handle the redirect and wait for the next page to load
         WebDriverWait(driver, 20).until(EC.url_contains("https://visas-de.tlscontact.com/"))
-        
-        # Optionally, you can add a specific check for a successful login, such as checking for a specific element
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "tls-appointment-time-picker")))
-        print("Login successful")
+        logs.append("Login successful")
 
     except Exception as e:
-        print(f"Error during login: {e}")
+        logs.append(f"Error during login: {e}")
         driver.save_screenshot("login_error.png")
 
-# Function to check for new appointments
 def check_appointments(driver):
     try:
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "tls-appointment-time-picker")))
         slots = driver.find_elements(By.CSS_SELECTOR, ".tls-time-unit:not(.-unavailable)")
         return len(slots) > 0
     except Exception as e:
-        print(f"Error during checking appointments: {e}")
+        logs.append(f"Error during checking appointments: {e}")
         return False
 
-# Function to book an appointment
 def book_appointment(driver):
     try:
         available_slots = driver.find_elements(By.CSS_SELECTOR, ".tls-time-unit:not(.-unavailable)")
@@ -75,41 +88,52 @@ def book_appointment(driver):
             slot_date = slot.find_element(By.XPATH, "../../div[@class='tls-time-group--header-title']").text
             slot_time = slot.text
             slot.click()  # Book the first available slot
-            print("Appointment booked successfully!")
+            logs.append("Appointment booked successfully!")
             send_webhook_notification("Appointment booked successfully!", slot_date, slot_time, driver.current_url)
+            status.update({
+                "appointment_booked": True,
+                "appointment_date": slot_date,
+                "appointment_time": slot_time
+            })
         else:
-            print("No available slots found.")
+            logs.append("No available slots found.")
             send_webhook_notification("No appointments available", None, None, driver.current_url)
     except Exception as e:
-        print(f"Error during booking appointment: {e}")
+        logs.append(f"Error during booking appointment: {e}")
 
-# Function to send a webhook notification
 def send_webhook_notification(message, date, time, url):
-    webhook_url = "https://hook.eu2.make.com/t4l44z3dvaxp7on5ka5yhhl5ekrt5xj7"  # Webhook URL
+    webhook_url = "https://hook.eu2.make.com/t4l44z3dvaxp7on5ka5yhhl5ekrt5xj7"
     payload = {
         'text': f"{message}\nDate: {date if date else 'N/A'}\nTime: {time if time else 'N/A'}\nURL: {url}"
     }
-    print(f"Sending webhook with payload: {payload}")
+    logs.append(f"Sending webhook with payload: {payload}")
     try:
         response = requests.post(webhook_url, json=payload)
-        print(f"Webhook response: {response.status_code} - {response.text}")
+        logs.append(f"Webhook response: {response.status_code} - {response.text}")
         if response.status_code == 200:
-            print("Webhook sent successfully.")
+            logs.append("Webhook sent successfully.")
         else:
-            print(f"Failed to send webhook. Status code: {response.status_code}")
+            logs.append(f"Failed to send webhook. Status code: {response.status_code}")
     except Exception as e:
-        print(f"Error sending webhook: {e}")
+        logs.append(f"Error sending webhook: {e}")
 
-# Main script
-login(driver, username, password)
+def main_task():
+    login(driver, username, password)
 
-while True:
-    if check_appointments(driver):
-        book_appointment(driver)
-        break
-    else:
-        print("No appointments available, checking again in 60 seconds...")
-        send_webhook_notification("No appointments available", None, None, driver.current_url)
-        time.sleep(3600)
+    while True:
+        status['last_check'] = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+        if check_appointments(driver):
+            book_appointment(driver)
+            break
+        else:
+            logs.append("No appointments available, checking again in 60 seconds...")
+            send_webhook_notification("No appointments available", None, None, driver.current_url)
+            status['next_check'] = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + 60))
+            time.sleep(60)
 
-driver.quit()
+    driver.quit()
+
+if __name__ == "__main__":
+    thread = Thread(target=main_task)
+    thread.start()
+    app.run(debug=True, use_reloader=False)
