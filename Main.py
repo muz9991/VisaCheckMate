@@ -61,17 +61,20 @@ def book_appointment(driver):
             send_webhook_notification("Appointment booked successfully!", slot_date, slot_time, driver.current_url)
         else:
             print("No available slots found.")
+            send_webhook_notification("No appointments available", None, None, driver.current_url)
     except Exception as e:
         print(f"Error during booking appointment: {e}")
 
 # Function to send a webhook notification
 def send_webhook_notification(message, date, time, url):
-    webhook_url = 'https://hook.eu2.make.com/a46ctcb9u2mb1d4h55f4y9ojnfgoky8l'  # Webhook URL
+    webhook_url = "https://hook.eu2.make.com/t4l44z3dvaxp7on5ka5yhhl5ekrt5xj7"  # Webhook URL
     payload = {
-        'text': f"{message}\nDate: {date}\nTime: {time}\nURL: {url}"
+        'text': f"{message}\nDate: {date if date else 'N/A'}\nTime: {time if time else 'N/A'}\nURL: {url}"
     }
+    print(f"Sending webhook with payload: {payload}")
     try:
         response = requests.post(webhook_url, json=payload)
+        print(f"Webhook response: {response.status_code} - {response.text}")
         if response.status_code == 200:
             print("Webhook sent successfully.")
         else:
@@ -91,6 +94,7 @@ while True:
         break
     else:
         print("No appointments available, checking again in 60 seconds...")
+        send_webhook_notification("No appointments available", None, None, driver.current_url)
         time.sleep(3600)
 
 driver.quit()
