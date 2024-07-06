@@ -4,6 +4,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import requests
 
 # Setup WebDriver
 driver = webdriver.Chrome()  # Ensure the ChromeDriver path is set if needed
@@ -30,7 +31,7 @@ def login(driver, username, password):
         WebDriverWait(driver, 20).until(EC.url_contains("https://visas-de.tlscontact.com/"))
         
         # Optionally, you can add a specific check for a successful login, such as checking for a specific element
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "appointment")))
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "tls-appointment-time-picker")))
         print("Login successful")
 
     except Exception as e:
@@ -40,8 +41,9 @@ def login(driver, username, password):
 # Function to check for new appointments
 def check_appointments(driver):
     try:
-        appointment_text = driver.find_element(By.ID, "appointment").text
-        return "No appointments available" not in appointment_text
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "tls-appointment-time-picker")))
+        slots = driver.find_elements(By.CSS_SELECTOR, ".tls-time-unit:not(.-unavailable)")
+        return len(slots) > 0
     except Exception as e:
         print(f"Error during checking appointments: {e}")
         return False
@@ -49,11 +51,33 @@ def check_appointments(driver):
 # Function to book an appointment
 def book_appointment(driver):
     try:
-        book_button = driver.find_element(By.ID, "book_appointment_button")
-        book_button.click()
-        print("Appointment booked successfully!")
+        available_slots = driver.find_elements(By.CSS_SELECTOR, ".tls-time-unit:not(.-unavailable)")
+        if available_slots:
+            slot = available_slots[0]
+            slot_date = slot.find_element(By.XPATH, "../../div[@class='tls-time-group--header-title']").text
+            slot_time = slot.text
+            slot.click()  # Book the first available slot
+            print("Appointment booked successfully!")
+            send_webhook_notification("Appointment booked successfully!", slot_date, slot_time, driver.current_url)
+        else:
+            print("No available slots found.")
     except Exception as e:
         print(f"Error during booking appointment: {e}")
+
+# Function to send a webhook notification
+def send_webhook_notification(message, date, time, url):
+    webhook_url = 'https://hook.eu2.make.com/a46ctcb9u2mb1d4h55f4y9ojnfgoky8l'  # Webhook URL
+    payload = {
+        'text': f"{message}\nDate: {date}\nTime: {time}\nURL: {url}"
+    }
+    try:
+        response = requests.post(webhook_url, json=payload)
+        if response.status_code == 200:
+            print("Webhook sent successfully.")
+        else:
+            print(f"Failed to send webhook. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error sending webhook: {e}")
 
 # Main script
 username = "Waleedbaloch343@gmail.com"
@@ -67,6 +91,6 @@ while True:
         break
     else:
         print("No appointments available, checking again in 60 seconds...")
-        time.sleep(60)
+        time.sleep(3600)
 
 driver.quit()
