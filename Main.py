@@ -6,14 +6,23 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get credentials from environment variables
+username = os.getenv('USERNAME')
+password = os.getenv('PASSWORD')
 
 # Setup WebDriver
 chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument('--headless')
-chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument('--disable-dev-shm-usage')
-chrome_options.binary_location = os.getenv('GOOGLE_CHROME_BIN', '/app/.apt/usr/bin/google-chrome')
-driver = webdriver.Chrome(executable_path=os.getenv('CHROMEDRIVER_PATH', '/app/.chromedriver/bin/chromedriver'), options=chrome_options)
+chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--no-sandbox")
+
+driver = webdriver.Chrome(executable_path=os.environ.get("CHROMEDRIVER_PATH"), options=chrome_options)
 
 # Function to login
 def login(driver, username, password):
@@ -89,9 +98,6 @@ def send_webhook_notification(message, date, time, url):
         print(f"Error sending webhook: {e}")
 
 # Main script
-username = "Waleedbaloch343@gmail.com"
-password = "Mehboob@180"
-
 login(driver, username, password)
 
 while True:
