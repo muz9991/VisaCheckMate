@@ -1,1 +1,1 @@
-worker: python visa_checker.py
+web: python visa_checker.py
