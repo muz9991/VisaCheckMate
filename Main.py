@@ -5,6 +5,15 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import requests
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get credentials from environment variables
+username = os.getenv('USERNAME')
+password = os.getenv('PASSWORD')
 
 # Setup WebDriver
 driver = webdriver.Chrome()  # Ensure the ChromeDriver path is set if needed
@@ -82,9 +91,6 @@ def send_webhook_notification(message, date, time, url):
     except Exception as e:
         print(f"Error sending webhook: {e}")
 
-# Main script
-username = "Waleedbaloch343@gmail.com"
-password = "Mehboob@180"
 
 login(driver, username, password)
 
